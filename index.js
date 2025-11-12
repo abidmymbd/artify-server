@@ -1,17 +1,14 @@
-const express = require('express')
+const express = require('express');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb')
-const app = express()
-const port = process.env.PORT || 3000
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const app = express();
+const port = process.env.PORT || 3000;
 
+// Middleware
+app.use(cors());
+app.use(express.json());
 
-// // MiddleWare
-app.use(cors())
-app.use(express.json())
-
-
-
-const uri = "mongodb+srv://artifynewwDBuser:H9rhD5vBxhjClG4G@abid-first-curd.xb64eac.mongodb.net/?appName=ABID-FIRST-CURD"
+const uri = "mongodb+srv://artifynewwDBuser:H9rhD5vBxhjClG4G@abid-first-curd.xb64eac.mongodb.net/?appName=ABID-FIRST-CURD";
 
 const client = new MongoClient(uri, {
     serverApi: {
@@ -19,28 +16,24 @@ const client = new MongoClient(uri, {
         strict: true,
         deprecationErrors: true,
     }
-})
+});
 
-const artworkCollection = client.db("artifyDB").collection("artworks")
+let artworkCollection;
+let favoritesCollection;
 
 app.get('/', (req, res) => {
-    res.send('Hello Artify')
-})
+    res.send('Hello Artify');
+});
 
-//  Get all artworks
+// Get all artworks
 app.get("/artworks", async (req, res) => {
     try {
-        const search = req.query.search?.trim().toLowerCase(); // convert search text to lowercase
+        const search = req.query.search?.trim().toLowerCase();
         const email = req.query.email;
-
-        // Start with public artworks (and optionally by email)
         let query = { visibility: "Public" };
         if (email) query.userEmail = email;
 
-        // Get all matching artworks from DB
         const allArtworks = await artworkCollection.find(query).toArray();
-
-        // If there's search text, filter in JS
         const filteredArtworks = search
             ? allArtworks.filter((art) =>
                 art.title.toLowerCase().includes(search)
@@ -54,10 +47,7 @@ app.get("/artworks", async (req, res) => {
     }
 });
 
-
-
-
-//  Add new artwork
+// Add new artwork
 app.post("/artworks", async (req, res) => {
     const artwork = req.body;
 
@@ -72,31 +62,28 @@ app.post("/artworks", async (req, res) => {
             id: result.insertedId,
         });
     } catch (err) {
-        console.error(" Error adding artwork:", err.message);
+        console.error("Error adding artwork:", err.message);
         res.send({ message: "Failed to add artwork." });
     }
 });
 
-
-// 🔹 Get featured artworks (last 6 added)
+// Get featured artworks (last 6 added)
 app.get("/featured-artworks", async (req, res) => {
     try {
         const artworks = await artworkCollection
             .find({})
-            .sort({ _id: -1 }) // sort by newest first
+            .sort({ _id: -1 })
             .limit(6)
             .toArray();
 
         res.send(artworks);
     } catch (err) {
-        console.error(" Error fetching featured artworks:", err.message);
+        console.error("Error fetching featured artworks:", err.message);
         res.send({ message: "Failed to fetch featured artworks." });
     }
 });
 
-//// For Single page and Like //
-const { ObjectId } = require("mongodb");
-
+// Get single artwork
 app.get("/artworks/:id", async (req, res) => {
     const { id } = req.params;
     try {
@@ -109,8 +96,7 @@ app.get("/artworks/:id", async (req, res) => {
     }
 });
 
-
-// For Like
+// Like an artwork
 app.patch("/artworks/:id/like", async (req, res) => {
     const { id } = req.params;
 
@@ -134,12 +120,60 @@ app.patch("/artworks/:id/like", async (req, res) => {
     }
 });
 
-//// For Single page and Like End //
+// Add to Favorites
+app.post("/favorites", async (req, res) => {
+    try {
+        const favorite = req.body;
+        console.log("Received favorite:", favorite);
+
+        if (!favorite.artworkId || !favorite.userEmail) {
+            return res.send({ message: "Missing required data" });
+        }
+
+        const exists = await favoritesCollection.findOne({
+            artworkId: favorite.artworkId,
+            userEmail: favorite.userEmail
+        });
+
+        if (exists) {
+            return res.status(400).send({ message: "Already in favorites" });
+        }
+
+        const result = await favoritesCollection.insertOne(favorite);
+        console.log("Inserted favorite:", result.insertedId);
+
+        res.send({ message: "Added to favorites!" });
+    } catch (err) {
+        console.error("Error adding favorite:", err);
+        res.send({ message: "Failed to add favorite" });
+    }
+});
+
+// Get all favorites by user email
+app.get("/favorites/:email", async (req, res) => {
+    const { email } = req.params;
+    console.log("Fetching favorites for:", email);
+
+    try {
+        const favorites = await favoritesCollection.find({ userEmail: email }).toArray();
+        console.log("Found favorites:", favorites.length);
+        res.send(Array.isArray(favorites) ? favorites : []);
+    } catch (err) {
+        console.error("Error fetching favorites:", err);
+        res.status(500).send([]);
+    }
+});
+
+// Delete from favorites
+app.delete("/favorites/:id", async (req, res) => {
+    const { id } = req.params;
+    const result = await favoritesCollection.deleteOne({ _id: new ObjectId(id) });
+    res.send({ deletedCount: result.deletedCount });
+});
 
 // Get total artworks by artist email
 app.get("/artist/:email/artworks/count", async (req, res) => {
     const { email } = req.params;
-
     try {
         const count = await artworkCollection.countDocuments({ userEmail: email });
         res.send({ totalArtworks: count });
@@ -147,23 +181,25 @@ app.get("/artist/:email/artworks/count", async (req, res) => {
         console.error(err);
         res.send({ message: "Failed to fetch artist's total artworks" });
     }
-})
+});
 
-
+// MongoDB connection
 async function run() {
     try {
         await client.connect();
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
-    } finally {
 
+        // ✅ Initialize collections after connection
+        const db = client.db("artifyDB");
+        artworkCollection = db.collection("artworks");
+        favoritesCollection = db.collection("favorites");
+    } catch (err) {
+        console.error("MongoDB connection error:", err);
     }
 }
-run().catch(console.dir)
-
+run().catch(console.dir);
 
 app.listen(port, () => {
-    console.log(`Artify app listening on port ${port}`)
-})
-
-
+    console.log(`Artify app listening on port ${port}`);
+});
