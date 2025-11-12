@@ -30,22 +30,30 @@ app.get('/', (req, res) => {
 //  Get all artworks
 app.get("/artworks", async (req, res) => {
     try {
-        const search = req.query.search?.trim();
+        const search = req.query.search?.trim().toLowerCase(); // convert search text to lowercase
         const email = req.query.email;
 
+        // Start with public artworks (and optionally by email)
         let query = { visibility: "Public" };
-
         if (email) query.userEmail = email;
 
-        if (search) query.title = search;
+        // Get all matching artworks from DB
+        const allArtworks = await artworkCollection.find(query).toArray();
 
-        const artworks = await artworkCollection.find(query).toArray();
-        res.send(artworks);
+        // If there's search text, filter in JS
+        const filteredArtworks = search
+            ? allArtworks.filter((art) =>
+                art.title.toLowerCase().includes(search)
+            )
+            : allArtworks;
+
+        res.send(filteredArtworks);
     } catch (err) {
         console.error("Error fetching artworks:", err.message);
         res.send({ message: "Failed to fetch artworks." });
     }
 });
+
 
 
 
@@ -143,19 +151,19 @@ app.get("/artist/:email/artworks/count", async (req, res) => {
 
 
 async function run() {
-        try {
-            await client.connect();
-            await client.db("admin").command({ ping: 1 });
-            console.log("Pinged your deployment. You successfully connected to MongoDB!");
-        } finally {
+    try {
+        await client.connect();
+        await client.db("admin").command({ ping: 1 });
+        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    } finally {
 
-        }
     }
+}
 run().catch(console.dir)
 
 
 app.listen(port, () => {
-        console.log(`Artify app listening on port ${port}`)
-    })
+    console.log(`Artify app listening on port ${port}`)
+})
 
 
