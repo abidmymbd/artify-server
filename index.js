@@ -173,10 +173,6 @@ app.post("/favorites", async (req, res) => {
             userEmail: favorite.userEmail
         });
 
-        if (exists) {
-            return res.send({ message: "Already in favorites" });
-        }
-
         const result = await favoritesCollection.insertOne(favorite);
         console.log("Inserted favorite:", result.insertedId);
 
