@@ -30,13 +30,23 @@ app.get('/', (req, res) => {
 //  Get all artworks
 app.get("/artworks", async (req, res) => {
     try {
-        const artworks = await artworkCollection.find({}).toArray();
-        res.status(200).send(artworks);
+        const search = req.query.search?.trim();
+        const email = req.query.email;
+
+        let query = { visibility: "Public" };
+
+        if (email) query.userEmail = email;
+
+        if (search) query.title = search;
+
+        const artworks = await artworkCollection.find(query).toArray();
+        res.send(artworks);
     } catch (err) {
         console.error("Error fetching artworks:", err.message);
-        res.status(500).send({ message: "Failed to fetch artworks." });
+        res.send({ message: "Failed to fetch artworks." });
     }
 });
+
 
 
 //  Add new artwork
@@ -44,18 +54,18 @@ app.post("/artworks", async (req, res) => {
     const artwork = req.body;
 
     if (!artwork || !artwork.title || !artwork.imageUrl) {
-        return res.status(400).send({ message: "Invalid artwork data!" });
+        return res.send({ message: "Invalid artwork data!" });
     }
 
     try {
         const result = await artworkCollection.insertOne(artwork);
-        res.status(201).send({
+        res.send({
             message: "Artwork added successfully!",
             id: result.insertedId,
         });
     } catch (err) {
         console.error(" Error adding artwork:", err.message);
-        res.status(500).send({ message: "Failed to add artwork." });
+        res.send({ message: "Failed to add artwork." });
     }
 });
 
@@ -69,29 +79,83 @@ app.get("/featured-artworks", async (req, res) => {
             .limit(6)
             .toArray();
 
-        res.status(200).send(artworks);
+        res.send(artworks);
     } catch (err) {
         console.error(" Error fetching featured artworks:", err.message);
-        res.status(500).send({ message: "Failed to fetch featured artworks." });
+        res.send({ message: "Failed to fetch featured artworks." });
+    }
+});
+
+//// For Single page and Like //
+const { ObjectId } = require("mongodb");
+
+app.get("/artworks/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        const artwork = await artworkCollection.findOne({ _id: new ObjectId(id) });
+        if (!artwork) return res.send({});
+        res.send(artwork);
+    } catch (err) {
+        console.error(err);
+        res.send({ message: "Failed to fetch artwork" });
     }
 });
 
 
+// For Like
+app.patch("/artworks/:id/like", async (req, res) => {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+        return res.send({ message: "Invalid artwork id" });
+    }
+
+    try {
+        const result = await artworkCollection.findOneAndUpdate(
+            { _id: new ObjectId(id) },
+            { $inc: { likes: 1 } },
+            { returnDocument: "after" }
+        );
+
+        if (!result.value) return res.status(404).send({ message: '' });
+
+        res.send({ likes: result.value.likes });
+    } catch (err) {
+        console.error(err);
+        res.send({ message: "" });
+    }
+});
+
+//// For Single page and Like End //
+
+// Get total artworks by artist email
+app.get("/artist/:email/artworks/count", async (req, res) => {
+    const { email } = req.params;
+
+    try {
+        const count = await artworkCollection.countDocuments({ userEmail: email });
+        res.send({ totalArtworks: count });
+    } catch (err) {
+        console.error(err);
+        res.send({ message: "Failed to fetch artist's total artworks" });
+    }
+})
+
 
 async function run() {
-    try {
-        await client.connect();
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
-    } finally {
+        try {
+            await client.connect();
+            await client.db("admin").command({ ping: 1 });
+            console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        } finally {
 
+        }
     }
-}
 run().catch(console.dir)
 
 
 app.listen(port, () => {
-    console.log(`Artify app listening on port ${port}`)
-})
+        console.log(`Artify app listening on port ${port}`)
+    })
 
 
