@@ -96,6 +96,44 @@ app.get("/artworks/:id", async (req, res) => {
     }
 });
 
+// Delete an artwork
+app.delete("/artworks/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await artworkCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 0) {
+            return res.send({ message: "Artwork not found" });
+        }
+        res.send({ message: "Artwork deleted successfully" });
+    } catch (err) {
+        console.error(err);
+        res.send({ message: "Failed to delete artwork" });
+    }
+});
+
+// Update an artwork
+app.put("/artworks/:id", async (req, res) => {
+    const { id } = req.params;
+    const updatedData = req.body;
+
+    try {
+        const result = await artworkCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updatedData }
+        );
+
+        if (result.modifiedCount === 0) {
+            return res.send({ message: "No changes made or artwork not found" });
+        }
+
+        res.send({ message: "Artwork updated successfully" });
+    } catch (err) {
+        console.error(err);
+        res.send({ message: "Failed to update artwork" });
+    }
+});
+
+
 // Like an artwork
 app.patch("/artworks/:id/like", async (req, res) => {
     const { id } = req.params;
@@ -111,7 +149,7 @@ app.patch("/artworks/:id/like", async (req, res) => {
             { returnDocument: "after" }
         );
 
-        if (!result.value) return res.status(404).send({ message: '' });
+        if (!result.value) return res.send({ message: '' });
 
         res.send({ likes: result.value.likes });
     } catch (err) {
@@ -136,7 +174,7 @@ app.post("/favorites", async (req, res) => {
         });
 
         if (exists) {
-            return res.status(400).send({ message: "Already in favorites" });
+            return res.send({ message: "Already in favorites" });
         }
 
         const result = await favoritesCollection.insertOne(favorite);
@@ -160,7 +198,7 @@ app.get("/favorites/:email", async (req, res) => {
         res.send(Array.isArray(favorites) ? favorites : []);
     } catch (err) {
         console.error("Error fetching favorites:", err);
-        res.status(500).send([]);
+        res.send([]);
     }
 });
 
@@ -183,6 +221,9 @@ app.get("/artist/:email/artworks/count", async (req, res) => {
     }
 });
 
+
+
+
 // MongoDB connection
 async function run() {
     try {
@@ -190,7 +231,6 @@ async function run() {
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
-        // ✅ Initialize collections after connection
         const db = client.db("artifyDB");
         artworkCollection = db.collection("artworks");
         favoritesCollection = db.collection("favorites");
